@@ -71,6 +71,9 @@ Graph HyperbolicGenerator::generate() {
 }
 
 Graph HyperbolicGenerator::generate(count n, double R, double alpha, double T) {
+    Aux::Timer timer;
+    timer.start();
+
 	assert(R > 0);
 	vector<double> angles(n);
 	vector<double> radii(n);
@@ -95,7 +98,12 @@ Graph HyperbolicGenerator::generate(count n, double R, double alpha, double T) {
 	}
 
 	INFO("Generated Points");
-	return generate(anglecopy, radiicopy, R, T);
+
+    timer_sampling = timer.elapsedMilliseconds();
+	auto tmp = generate(anglecopy, radiicopy, R, T);
+    timer_total = timer.elapsedMilliseconds();
+
+    return tmp;
 }
 
 Graph HyperbolicGenerator::generateCold(const vector<double> &angles, const vector<double> &radii, double R) {
@@ -311,15 +319,20 @@ Graph HyperbolicGenerator::generate(const vector<double> &angles, const vector<d
 
 	auto angleDist = [](double phi, double psi){ return PI - std::abs(PI-std::abs(phi - psi)); };
 
+
+    timer_preprocess = timer.elapsedMilliseconds();
+
 	//get Graph
-	GraphBuilder result(n, false, false);//no direct swap with probabilistic graphs
+	//GraphBuilder result(n, false, false);//no direct swap with probabilistic graphs
 	count totalCandidates = 0;
 	count totalSweptPoints = 0;
 	count totalQueryPoints = 0;
 
+    count num_edges = 0, dummy = 0;
+
 	for (index bandIndex = 0; bandIndex < bandCount; bandIndex++) {
 		const omp_index bandSize = static_cast<omp_index>(bands[bandIndex].size());
-		#pragma omp parallel for reduction(+:totalCandidates,totalSweptPoints,totalQueryPoints)
+		#pragma omp parallel for reduction(+:totalCandidates,totalSweptPoints,totalQueryPoints,num_edges,dummy)
 		for (omp_index bandSweepIndex = 0; bandSweepIndex < bandSize; bandSweepIndex++) {
 			index i = bands[bandIndex][bandSweepIndex].getIndex();
 			totalQueryPoints += 1;
@@ -382,7 +395,11 @@ Graph HyperbolicGenerator::generate(const vector<double> &angles, const vector<d
 					//accept?
 					double acc = Aux::Random::real();
 					if (acc < q) {
-						result.addHalfEdge(i, bands[j][cIndex].getIndex());
+                        auto v1 = i;
+                        auto v2 = bands[j][cIndex].getIndex();
+                        num_edges++;
+                        dummy ^= v1^v2;
+						//result.addHalfEdge(i, bands[j][cIndex].getIndex());
 					}
 				};
 
@@ -479,10 +496,14 @@ Graph HyperbolicGenerator::generate(const vector<double> &angles, const vector<d
 			}
 		}
 	}
-	std::cout << "Candidates tested: " << totalCandidates << std::endl << std::flush;
-	std::cout << "Total Swept points: " << totalSweptPoints << std::endl << std::flush;
-	std::cout << "Total Query points: " << totalQueryPoints << std::endl << std::flush;
-	return result.toGraph(true, true);
+    
+    number_of_edges = num_edges;
+    return {};
+
+	//std::cout << "Candidates tested: " << totalCandidates << std::endl << std::flush;
+	//std::cout << "Total Swept points: " << totalSweptPoints << std::endl << std::flush;
+	//std::cout << "Total Query points: " << totalQueryPoints << std::endl << std::flush;
+	//return result.toGraph(true, true);
 
 }
 }
